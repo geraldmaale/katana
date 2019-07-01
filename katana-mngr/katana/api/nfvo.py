@@ -2,12 +2,29 @@
 from flask import request
 from flask_classful import FlaskView
 from katana.api.osmUtils import osmUtils
-from katana.api.tango5gUtils import tango5gUtils
+# from katana.api.tango5gUtils import tango5gUtils
 from requests import ConnectionError, ConnectTimeout
 import uuid
 from katana.api.mongoUtils import mongoUtils
 from bson.json_util import dumps
+from bson.binary import Binary
+import pickle
 import time
+import logging
+
+# Logging Parameters
+logger = logging.getLogger(__name__)
+file_handler = logging.handlers.RotatingFileHandler(
+    'katana.log', maxBytes=10000, backupCount=5)
+stream_handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s')
+stream_formatter = logging.Formatter(
+    '%(asctime)s %(name)s %(levelname)s %(message)s')
+file_handler.setFormatter(formatter)
+stream_handler.setFormatter(stream_formatter)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
 
 
 class NFVOView(FlaskView):
@@ -18,7 +35,13 @@ class NFVOView(FlaskView):
         Returns a list of nfvo and their details,
         used by: `katana nfvo ls`
         """
-        return dumps(mongoUtils.index("nfvo"))
+        nfvo_data = mongoUtils.index("nfvo")
+        return_data = []
+        for infvo in nfvo_data:
+            return_data.append(dict(_id=infvo['_id'],
+                               created_at=infvo['created_at'],
+                               type=infvo['type']))
+        return dumps(return_data)
 
     def get(self, uuid):
         """
@@ -36,38 +59,28 @@ class NFVOView(FlaskView):
         request.json['_id'] = new_uuid
         request.json['created_at'] = time.time()  # unix epoch
 
-        # TODO implement authorizing nfvo connection
         if request.json['type'] == "OSM":
-            username = request.json['nfvousername']
-            password = request.json['nfvopassword']
-            ip = request.json['nfvoip']
-            project_name = request.json['tenantname']
+            # Create the NFVO object
+            osm_username = request.json['nfvousername']
+            osm_password = request.json['nfvopassword']
+            osm_ip = request.json['nfvoip']
+            osm_project_name = request.json['tenantname']
+            osm = osmUtils.Osm(osm_ip, osm_username,
+                               osm_password, osm_project_name)
             try:
-                token = osmUtils.get_token(
-                    ip=ip,
-                    project_id=project_name,
-                    username=username,
-                    password=password)
+                osm.get_token()
             except ConnectTimeout as e:
-                print("It is time for ... Time out")
+                logger.exception("It is time for ... Time out")
                 response = dumps({'error': 'Unable to connect to NFVO'})
                 return (response, 400)
             except ConnectionError as e:
-                print("Unable to connect")
+                logger.exception("Unable to connect")
                 response = dumps({'error': 'Unable to connect to NFVO'})
                 return (response, 400)
             else:
-                request.json['token_id'] = token
-                return mongoUtils.add("nfvo", request.json)
-        elif request.json['type'] == "5GTango":
-            try:
-                url = request.json['nfvoip']
-                tango5gUtils.register_sp(url)
-            except ConnectionError as e:
-                print("There was a connection error")
-                response = dumps({'error': 'Unable to connect to NFVO'})
-                return (response, 400)
-            else:
+                # Store the osm object to the mongo db
+                thebytes = pickle.dumps(osm)
+                request.json['nfvo'] = Binary(thebytes)
                 return mongoUtils.add("nfvo", request.json)
         else:
             response = dumps({'error': 'This type nfvo is not supported'})

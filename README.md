@@ -1,4 +1,18 @@
-# katana Slice Manager version 0.1.0
+# katana Slice Manager version 0.2.0
+
+## New in version 0.2.0
+### New Features
+- Integration with OpenNebula VIM
+- Service Deployment Time Measurements
+- Logging System for local and remote log server
+- Slice Deletion Function
+
+### Changes
+- sliceUtils file with slice functions
+- Removed tango MANO
+
+### Bugs Fixed
+- Openstack credentials bug fixed
 
 ## Quick Start
 
@@ -16,4 +30,4 @@
 `# ./stop.sh`
 
 ## Documentation
-Visit the [Wiki page](https://github.com/medianetlab/katana/wiki) of the repository
+Visit the [Wiki page](https://gitlab.fokus.fraunhofer.de/5genesis/slice-manager/wikis/home) of the repository
